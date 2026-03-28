@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Trading Bot — Binance Futures Testnet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" />
+<style>
+  :root {
+    --bg:     #0a0c0f; --bg2: #0f1318; --bg3: #151a21;
+    --bdr:    #1e2730; --bdr2: #243040;
+    --text:   #c8d4e0; --dim: #4a5a6a;
+    --accent: #00d4a8; --blue: #0099ff;
+    --buy:    #00c987; --sell: #ff4d6a; --warn: #f0a500;
+    --mono:   'IBM Plex Mono', monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 13px; min-height: 100vh; }
+  body::after {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 9999;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.025) 2px, rgba(0,0,0,.025) 4px);
+  }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 22px; border-bottom: 1px solid var(--bdr);
+    background: var(--bg2); position: sticky; top: 0; z-index: 100;
+  }
+  .logo { display: flex; align-items: center; gap: 9px; }
+  .logo-hex {
+    width: 22px; height: 22px; background: var(--accent);
+    clip-path: polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);
+    animation: hpulse 3s ease-in-out infinite;
+  }
+  @keyframes hpulse { 0%,100%{opacity:1} 50%{opacity:.45} }
+  .logo-name { font-size: 13px; font-weight: 600; color: #fff; letter-spacing: .12em; }
+  .logo-sub  { font-size: 9px; color: var(--dim); letter-spacing: .07em; margin-top: 1px; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .futures-badge { font-size: 9px; padding: 3px 9px; border: 1px solid var(--blue); color: var(--blue); border-radius: 2px; letter-spacing: .1em; }
+  .net-badge     { font-size: 9px; padding: 3px 9px; border: 1px solid var(--accent); color: var(--accent); border-radius: 2px; letter-spacing: .1em; }
+  .clock         { font-size: 11px; color: var(--dim); min-width: 72px; text-align: right; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    grid-template-rows: 1fr 210px;
+    height: calc(100vh - 51px);
+  }
+
+  .panel { border-right: 1px solid var(--bdr); border-bottom: 1px solid var(--bdr); overflow: hidden; }
+  .ptitle {
+    font-size: 9px; letter-spacing: .15em; color: var(--dim);
+    padding: 9px 16px; border-bottom: 1px solid var(--bdr);
+    background: var(--bg2); text-transform: uppercase;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .ptitle::before { content: ''; width: 5px; height: 5px; background: var(--accent); border-radius: 50%; flex-shrink: 0; }
+
+  .form-panel { grid-row: 1 / 3; display: flex; flex-direction: column; }
+  .form-body  { padding: 16px; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 13px; }
+
+  .side-toggle { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--bdr2); border-radius: 3px; overflow: hidden; }
+  .side-btn {
+    padding: 10px; text-align: center; cursor: pointer;
+    font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: .1em;
+    border: none; background: transparent; color: var(--dim); transition: all .15s;
+  }
+  .side-btn.buy.active  { background: var(--buy);  color: #000; }
+  .side-btn.sell.active { background: var(--sell); color: #fff; }
+  .side-btn:hover:not(.active) { background: var(--bg3); color: var(--text); }
+
+  .type-tabs { display: flex; gap: 2px; }
+  .type-tab {
+    padding: 5px 11px; font-family: var(--mono); font-size: 10px; letter-spacing: .07em;
+    border: 1px solid var(--bdr2); background: transparent; color: var(--dim);
+    cursor: pointer; border-radius: 2px; transition: all .15s;
+  }
+  .type-tab.active { border-color: var(--blue); color: var(--blue); background: rgba(0,153,255,.08); }
+  .type-tab:hover:not(.active) { color: var(--text); }
+
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 9px; letter-spacing: .11em; color: var(--dim); text-transform: uppercase; }
+  .field input {
+    background: var(--bg3); border: 1px solid var(--bdr2); border-radius: 3px;
+    color: var(--text); font-family: var(--mono); font-size: 13px;
+    padding: 8px 10px; outline: none; transition: border-color .15s; width: 100%;
+  }
+  .field input:focus { border-color: var(--blue); }
+  .field input::placeholder { color: var(--dim); }
+
+  .sym-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 8px; }
+  .sym-chip {
+    padding: 5px 3px; font-size: 9px; text-align: center; letter-spacing: .03em;
+    border: 1px solid var(--bdr2); border-radius: 2px; cursor: pointer;
+    color: var(--dim); background: transparent; font-family: var(--mono); transition: all .15s;
+  }
+  .sym-chip:hover, .sym-chip.active { border-color: var(--blue); color: var(--blue); background: rgba(0,153,255,.07); }
+
+  .price-wrap { display: none; flex-direction: column; gap: 13px; }
+  .price-wrap.show { display: flex; }
+  .stop-wrap { display: none; flex-direction: column; gap: 5px; }
+  .stop-wrap.show { display: flex; }
+
+  .submit-btn {
+    width: 100%; padding: 11px; font-family: var(--mono); font-size: 12px;
+    font-weight: 600; letter-spacing: .12em; border: none; border-radius: 3px;
+    cursor: pointer; transition: all .15s;
+  }
+  .submit-btn.buy-btn  { background: var(--buy);  color: #000; }
+  .submit-btn.sell-btn { background: var(--sell); color: #fff; }
+  .submit-btn:hover    { filter: brightness(1.1); transform: translateY(-1px); }
+  .submit-btn:active   { transform: none; }
+  .submit-btn:disabled { opacity: .4; cursor: not-allowed; transform: none; filter: none; }
+
+  .poll-bar {
+    display: none; align-items: center; gap: 8px;
+    padding: 7px 11px; background: rgba(0,153,255,.08);
+    border: 1px solid rgba(0,153,255,.25); border-radius: 3px;
+    font-size: 10px; color: var(--blue); letter-spacing: .06em;
+  }
+  .poll-bar.show { display: flex; }
+
+  .form-err {
+    padding: 8px 11px; background: rgba(255,77,106,.09);
+    border: 1px solid rgba(255,77,106,.3); border-radius: 3px;
+    color: var(--sell); font-size: 11px; line-height: 1.5; display: none;
+  }
+  .form-err.show { display: block; }
+
+  .resp-panel { overflow-y: auto; }
+  .resp-empty {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: calc(100% - 35px); color: var(--dim); gap: 8px;
+  }
+  .resp-empty-ico { font-size: 22px; opacity: .22; }
+  .resp-empty span { font-size: 10px; letter-spacing: .06em; }
+  .resp-body { padding: 16px; display: none; }
+  .resp-body.show { display: block; }
+
+  .status-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+  .sdot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .sdot.ok      { background: var(--buy);  box-shadow: 0 0 6px var(--buy); }
+  .sdot.fail    { background: var(--sell); box-shadow: 0 0 6px var(--sell); }
+  .sdot.polling { background: var(--blue); animation: blink .9s ease-in-out infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+  .slabel { font-size: 10px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; }
+  .slabel.ok      { color: var(--buy); }
+  .slabel.fail    { color: var(--sell); }
+  .slabel.polling { color: var(--blue); }
+
+  .rgrid   { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 14px; }
+  .rcell   { background: var(--bg3); border: 1px solid var(--bdr); border-radius: 3px; padding: 9px 11px; }
+  .rclabel { font-size: 8px; color: var(--dim); letter-spacing: .11em; text-transform: uppercase; margin-bottom: 3px; }
+  .rcval   { font-size: 14px; font-weight: 500; color: #fff; }
+  .rcval.c-buy    { color: var(--buy); }
+  .rcval.c-sell   { color: var(--sell); }
+  .rcval.c-filled { color: var(--accent); }
+  .rcval.c-dim    { color: var(--dim); }
+
+  .tag { display: inline-block; padding: 2px 6px; border-radius: 2px; font-size: 9px; font-weight: 600; }
+  .tag.buy    { background: rgba(0,201,135,.15); color: var(--buy); }
+  .tag.sell   { background: rgba(255,77,106,.15); color: var(--sell); }
+  .tag.filled { background: rgba(0,212,168,.1);  color: var(--accent); }
+  .tag.new    { background: rgba(0,153,255,.1);  color: var(--blue); }
+
+  .raw-btn  { font-size: 10px; color: var(--dim); border: none; background: none; font-family: var(--mono); cursor: pointer; padding: 0; margin-bottom: 6px; letter-spacing: .05em; }
+  .raw-btn:hover { color: var(--text); }
+  .raw-json {
+    background: var(--bg3); border: 1px solid var(--bdr); border-radius: 3px;
+    padding: 11px; font-size: 10px; color: var(--dim); white-space: pre;
+    overflow: auto; max-height: 160px; display: none;
+  }
+  .raw-json.show { display: block; }
+
+  .log-panel { grid-column: 2; border-right: none; border-bottom: none; display: flex; flex-direction: column; }
+  .log-bar   {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 16px; border-bottom: 1px solid var(--bdr); background: var(--bg2);
+  }
+  .log-title { font-size: 9px; letter-spacing: .14em; color: var(--dim); text-transform: uppercase; display: flex; align-items: center; gap: 6px; }
+  .log-title::before { content: ''; width: 5px; height: 5px; background: var(--warn); border-radius: 50%; }
+  .log-file  { font-size: 9px; color: #2a3a4a; }
+  .log-ref   { font-size: 9px; color: var(--dim); border: 1px solid var(--bdr2); border-radius: 2px; font-family: var(--mono); cursor: pointer; padding: 2px 8px; letter-spacing: .05em; background: transparent; transition: all .15s; }
+  .log-ref:hover { color: var(--text); }
+  .log-body  { flex: 1; overflow-y: auto; padding: 8px 16px; font-size: 10px; line-height: 1.8; }
+  .ll { display: flex; gap: 8px; }
+  .ll .ts  { color: #2a3a4a; flex-shrink: 0; }
+  .ll .lv  { flex-shrink: 0; min-width: 38px; }
+  .ll .lv.INFO  { color: var(--blue); }
+  .ll .lv.ERROR { color: var(--sell); }
+  .ll .lv.WARN  { color: var(--warn); }
+  .ll .lv.DEBUG { color: #2a3a4a; }
+  .ll .lm { color: var(--text); word-break: break-all; }
+  .log-empty { color: var(--dim); font-size: 10px; letter-spacing: .06em; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spin { display: inline-block; width: 10px; height: 10px; border: 2px solid rgba(255,255,255,.2); border-top-color: currentColor; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+  .fade-in { animation: fadeUp .22s ease forwards; }
+  ::-webkit-scrollbar { width: 3px; } ::-webkit-scrollbar-thumb { background: var(--bdr2); border-radius: 2px; } ::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-hex"></div>
+    <div>
+      <div class="logo-name">TRADING BOT</div>
+      <div class="logo-sub">Binance Futures Testnet · USDT-M</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <span class="futures-badge">FUTURES</span>
+    <span class="net-badge">TESTNET</span>
+    <span class="clock" id="clock">--:--:--</span>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- FORM -->
+  <div class="panel form-panel">
+    <div class="ptitle">New Order</div>
+    <div class="form-body">
+
+      <div class="side-toggle">
+        <button class="side-btn buy active" onclick="setSide('BUY')">BUY / LONG</button>
+        <button class="side-btn sell"       onclick="setSide('SELL')">SELL / SHORT</button>
+      </div>
+
+      <div class="type-tabs">
+        <button class="type-tab active" onclick="setType('MARKET',this)">Market</button>
+        <button class="type-tab"        onclick="setType('LIMIT',this)">Limit</button>
+        <button class="type-tab"        onclick="setType('STOP_LIMIT',this)">Stop-Limit</button>
+      </div>
+
+      <!-- symbol -->
+      <div>
+        <div style="font-size:9px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;margin-bottom:7px">Symbol</div>
+        <div class="sym-grid" id="symGrid"></div>
+        <div class="field">
+          <label>Or type manually</label>
+          <input type="text" id="symbol" placeholder="e.g. BTCUSDT" />
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Quantity</label>
+        <input type="number" id="quantity" placeholder="0.001" step="any" min="0" />
+      </div>
+
+      <div class="price-wrap" id="priceWrap">
+        <div class="field">
+          <label>Limit Price (USDT)</label>
+          <input type="number" id="price" placeholder="0.00" step="any" min="0" />
+        </div>
+      </div>
+
+      <div class="stop-wrap field" id="stopWrap">
+        <label>Stop Trigger Price (USDT)</label>
+        <input type="number" id="stopPrice" placeholder="0.00" step="any" min="0" />
+      </div>
+
+      <button class="submit-btn buy-btn" id="submitBtn" onclick="submitOrder()">PLACE BUY ORDER</button>
+
+      <div class="poll-bar" id="pollBar">
+        <span class="spin"></span>
+        <span>Waiting for fill from exchange...</span>
+      </div>
+
+      <div class="form-err" id="formErr"></div>
+    </div>
+  </div>
+
+  <!-- RESPONSE -->
+  <div class="panel resp-panel">
+    <div class="ptitle">Order Response</div>
+    <div class="resp-empty" id="respEmpty">
+      <div class="resp-empty-ico">◈</div>
+      <span>Awaiting first order...</span>
+    </div>
+    <div class="resp-body" id="respBody">
+      <div class="status-row">
+        <div class="sdot" id="sdot"></div>
+        <span class="slabel" id="slabel"></span>
+      </div>
+      <div class="rgrid" id="rgrid"></div>
+      <button class="raw-btn" onclick="toggleRaw()">⟨ ⟩ raw json</button>
+      <div class="raw-json" id="rawJson"></div>
+    </div>
+  </div>
+
+  <!-- LOG -->
+  <div class="panel log-panel">
+    <div class="log-bar">
+      <span class="log-title">Live Log</span>
+      <span class="log-file" id="logFile"></span>
+      <button class="log-ref" onclick="loadLogs()">↻ refresh</button>
+    </div>
+    <div class="log-body" id="logBody">
+      <div class="log-empty">No log entries yet.</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let currentSide = 'BUY';
+  let currentType = 'MARKET';
+
+  const SYMS = ['BTCUSDT','ETHUSDT','BNBUSDT','SOLUSDT','XRPUSDT','ADAUSDT','DOGEUSDT','AVAXUSDT'];
+
+  setInterval(() => {
+    document.getElementById('clock').textContent =
+      new Date().toUTCString().slice(17,25) + ' UTC';
+  }, 1000);
+
+  function setSide(s) {
+    currentSide = s;
+    document.querySelectorAll('.side-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector(`.side-btn.${s.toLowerCase()}`).classList.add('active');
+    const btn = document.getElementById('submitBtn');
+    btn.className   = `submit-btn ${s === 'BUY' ? 'buy' : 'sell'}-btn`;
+    btn.textContent = `PLACE ${s} ORDER`;
+  }
+
+  function setType(t, el) {
+    currentType = t;
+    document.querySelectorAll('.type-tab').forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('priceWrap').classList.toggle('show', t !== 'MARKET');
+    document.getElementById('stopWrap').classList.toggle('show',  t === 'STOP_LIMIT');
+  }
+
+  function renderGrid() {
+    document.getElementById('symGrid').innerHTML = SYMS.map(s => {
+      const base = s.replace('USDT','');
+      return `<button class="sym-chip" onclick="pickSym('${s}',this)">${base}</button>`;
+    }).join('');
+  }
+
+  function pickSym(s, el) {
+    document.getElementById('symbol').value = s;
+    document.querySelectorAll('.sym-chip').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+  }
+
+  renderGrid();
+
+  async function submitOrder() {
+    clearErr();
+    const btn  = document.getElementById('submitBtn');
+    const poll = document.getElementById('pollBar');
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spin"></span>  Placing...`;
+
+    if (currentType === 'MARKET') poll.classList.add('show');
+    showPlacing();
+
+    const payload = {
+      symbol:     document.getElementById('symbol').value.trim(),
+      side:       currentSide,
+      order_type: currentType,
+      quantity:   document.getElementById('quantity').value,
+      price:      document.getElementById('price').value    || null,
+      stop_price: document.getElementById('stopPrice').value || null,
+    };
+
+    try {
+      const res  = await fetch('/api/order', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      poll.classList.remove('show');
+      showResponse(data);
+      if (data.ok) setTimeout(loadLogs, 600);
+    } catch(e) {
+      poll.classList.remove('show');
+      showErr('Network error: ' + e.message);
+    } finally {
+      btn.disabled    = false;
+      btn.textContent = orig;
+    }
+  }
+
+  function showPlacing() {
+    document.getElementById('respEmpty').style.display = 'none';
+    document.getElementById('respBody').style.display  = 'block';
+    document.getElementById('sdot').className   = 'sdot polling';
+    document.getElementById('slabel').className = 'slabel polling';
+    document.getElementById('slabel').textContent = 'Placing Order';
+    document.getElementById('rgrid').innerHTML = `
+      <div class="rcell" style="grid-column:1/-1;text-align:center;padding:18px">
+        <span style="color:var(--dim);font-size:11px">Waiting for exchange response...</span>
+      </div>`;
+  }
+
+  function clearErr() { const e=document.getElementById('formErr'); e.textContent=''; e.classList.remove('show'); }
+  function showErr(m) { const e=document.getElementById('formErr'); e.textContent=m; e.classList.add('show'); }
+
+  function showResponse(data) {
+    document.getElementById('respEmpty').style.display = 'none';
+    const body = document.getElementById('respBody');
+    body.style.display = 'block';
+    body.classList.add('fade-in');
+
+    const dot   = document.getElementById('sdot');
+    const label = document.getElementById('slabel');
+
+    if (data.ok) {
+      const st   = data.status || '—';
+      const sc   = (data.side || '').toLowerCase();
+      const stCl = st === 'FILLED' ? 'filled' : 'new';
+      const avgP = data.avg_price && parseFloat(data.avg_price) > 0
+        ? Number(data.avg_price).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:4})
+        : '—';
+
+      dot.className   = 'sdot ok';
+      label.className = 'slabel ok';
+      label.textContent = st === 'FILLED' ? 'Order Filled' : 'Order Placed';
+
+      document.getElementById('rgrid').innerHTML = `
+        <div class="rcell">
+          <div class="rclabel">Order ID</div>
+          <div class="rcval" style="font-size:12px">${data.order_id||'—'}</div>
+        </div>
+        <div class="rcell">
+          <div class="rclabel">Status</div>
+          <div class="rcval"><span class="tag ${stCl}">${st}</span></div>
+        </div>
+        <div class="rcell">
+          <div class="rclabel">Executed Qty</div>
+          <div class="rcval c-${sc}">${data.executed_qty||'0'}</div>
+        </div>
+        <div class="rcell">
+          <div class="rclabel">Avg Price</div>
+          <div class="rcval ${avgP!=='—'?'c-filled':'c-dim'}">${avgP}</div>
+        </div>
+        <div class="rcell">
+          <div class="rclabel">Symbol</div>
+          <div class="rcval" style="font-size:12px">${data.symbol||'—'}</div>
+        </div>
+        <div class="rcell">
+          <div class="rclabel">Side</div>
+          <div class="rcval"><span class="tag ${sc}">${data.side||'—'}</span></div>
+        </div>`;
+
+      document.getElementById('rawJson').textContent = JSON.stringify(data.raw, null, 2);
+    } else {
+      dot.className   = 'sdot fail';
+      label.className = 'slabel fail';
+      label.textContent = 'Order Failed';
+      document.getElementById('rgrid').innerHTML = `
+        <div class="rcell" style="grid-column:1/-1">
+          <div class="rclabel">Error</div>
+          <div class="rcval" style="font-size:12px;color:var(--sell);font-weight:400">${data.error}</div>
+        </div>`;
+      document.getElementById('rawJson').textContent = '';
+      showErr(data.error);
+    }
+  }
+
+  function toggleRaw() { document.getElementById('rawJson').classList.toggle('show'); }
+
+  async function loadLogs() {
+    try {
+      const res  = await fetch('/api/logs?lines=80');
+      const data = await res.json();
+      if (data.file) document.getElementById('logFile').textContent = data.file;
+      const body = document.getElementById('logBody');
+      if (!data.lines || !data.lines.length) {
+        body.innerHTML = '<div class="log-empty">No log entries yet.</div>';
+        return;
+      }
+      body.innerHTML = data.lines.map(line => {
+        const m = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(\w+)\] (.+)$/);
+        if (!m) return `<div class="ll"><span class="lm">${esc(line)}</span></div>`;
+        const [,ts,lv,rest] = m;
+        return `<div class="ll">
+          <span class="ts">${ts.slice(11)}</span>
+          <span class="lv ${lv}">${lv}</span>
+          <span class="lm">${esc(rest)}</span>
+        </div>`;
+      }).join('');
+      body.scrollTop = body.scrollHeight;
+    } catch {}
+  }
+
+  function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  loadLogs();
+  setInterval(loadLogs, 5000);
+</script>
+</body>
+</html>
